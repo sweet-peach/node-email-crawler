@@ -1,8 +1,22 @@
-import {HttpCrawler, log} from 'crawlee';
+import {CheerioCrawler, log} from 'crawlee';
 import {promises as dns} from "dns";
 import {config} from "./config.js";
 
 let emailSet = new Set();
+
+const COMMON_INCLUDE = [
+    '**/*.html', '**/*.htm', '**/',
+    '**/*.php', '**/*.asp', '**/*.aspx', '**/*.jsp',
+    '**/contact*', '**/about*', '**/team*', '**/staff*',
+    '**/aviso*', '**/legal*', '**/privacy*', '**/politica*',
+    '**/blog/**', '**/news/**'
+];
+
+const COMMON_EXCLUDE = [
+    '**/*.jpg', '**/*.jpeg', '**/*.png', '**/*.gif', '**/*.svg', '**/*.webp', '**/*.ico',
+    '**/*.css', '**/*.js', '**/*.woff*', '**/*.ttf', '**/*.eot',
+    '**/*.mp4', '**/*.mp3', '**/*.avi', '**/*.zip', '**/*.rar', '**/*.7z', '**/*.tar', '**/*.gz'
+];
 
 function extractEmails(text) {
     const pattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
@@ -14,18 +28,32 @@ function extractEmails(text) {
     }
 }
 
-const crawler = new HttpCrawler({
+const crawler = new CheerioCrawler({
     maxConcurrency: config.MAX_CONCURRENCY,
     minConcurrency: 10,
     requestHandlerTimeoutSecs: 60,
-    autoscaledPoolOptions: { autoscaleIntervalSecs: 5 },
+    autoscaledPoolOptions: {autoscaleIntervalSecs: 5},
     maxRequestsPerCrawl: 10000,
     respectRobotsTxtFile: true,
     async requestHandler({request, $, body, enqueueLinks}) {
-        const html = body.toString();
-        extractEmails(html);
-        if(!html) return;
-        await enqueueLinks({ html, strategy: 'same-domain' });
+        log.info(`Processing: ${request.loadedUrl || request.url}`);
+        if (request.headers['content-type']?.includes('text/html')) {
+            return;
+        }
+
+        const text = $ ? $.text() : body;
+        extractEmails(text);
+
+
+        await enqueueLinks(
+            {
+                strategy: 'same-domain',
+                globs: COMMON_INCLUDE,
+                exclude: COMMON_EXCLUDE,
+            });
+    },
+    failedRequestHandler({request, error}) {
+        log.warning(`❌  ${request.url} failed: ${error?.message ?? 'unknown error'}`);
     },
 });
 
