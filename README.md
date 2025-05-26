@@ -11,15 +11,11 @@ Current repo layout:
 | **`config.js`**  | Central tweak‑point (e.g. `MAX_CONCURRENCY`)                                                              |
 | **`README.md`**  | You are here                                                                                              |
 
----
-
 ## 1. Installation
 
 ```bash
 npm install
 ```
-
----
 
 ## 2. Input file (`in.csv`)
 
@@ -30,8 +26,6 @@ Single‑line entries separated by a semicolon**`;`**:
 ```
 
 Duplicate lines are allowed; `index.js` de‑duplicates domains internally so each site is crawled once.
-
----
 
 ## 3. Running the batch
 
@@ -59,8 +53,6 @@ Flow inside **`index.js`**:
 
 When the stream closes you’ll see **“Done”** in the console.
 
----
-
 ## 4. Configuration (`config.js`)
 
 ```js
@@ -70,8 +62,6 @@ export const config = {
 ```
 
 The value is imported inside `crawler.js` to set `maxConcurrency`. Tweak as your bandwidth / CPU allow.
-
----
 
 ## 5. Scraper internals (`crawler.js`)
 
@@ -92,8 +82,6 @@ import { crawlUrl } from './crawler.js';
 const [host, ext] = await crawlUrl('https://example.com');
 ```
 
----
-
-## 5. License
+## 6. License
 
 MIT © 2025 — Use responsibly.
