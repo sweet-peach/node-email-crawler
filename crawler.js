@@ -30,19 +30,15 @@ function extractEmails(text) {
 
 const crawler = new CheerioCrawler({
     maxConcurrency: config.MAX_CONCURRENCY,
-    minConcurrency: 10,
+    minConcurrency: 5,
     requestHandlerTimeoutSecs: 60,
     autoscaledPoolOptions: {autoscaleIntervalSecs: 5},
     maxRequestsPerCrawl: 10000,
     respectRobotsTxtFile: true,
     async requestHandler({request, $, body, enqueueLinks}) {
-        if (request.headers['content-type']?.includes('text/html')) {
-            return;
-        }
 
-        const text = $ ? $.text() : body;
+        const text = body.toString()
         extractEmails(text);
-
 
         await enqueueLinks(
             {

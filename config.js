@@ -1,3 +1,3 @@
 export const config = {
-    MAX_CONCURRENCY: 20
+    MAX_CONCURRENCY: 10
 }
