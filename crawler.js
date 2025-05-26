@@ -4,6 +4,8 @@ import {config} from "./config.js";
 
 let emailSet = new Set();
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const COMMON_INCLUDE = [
     '**/*.html', '**/*.htm', '**/',
     '**/*.php', '**/*.asp', '**/*.aspx', '**/*.jsp',
@@ -35,9 +37,11 @@ const crawler = new CheerioCrawler({
     autoscaledPoolOptions: {autoscaleIntervalSecs: 5},
     maxRequestsPerCrawl: 10000,
     respectRobotsTxtFile: true,
+    ignoreSslErrors: true,
+    additionalMimeTypes: ['application/rss+xml'],
     async requestHandler({request, $, body, enqueueLinks}) {
 
-        const text = body.toString()
+        const text = body.toString();
         extractEmails(text);
 
         await enqueueLinks(
@@ -60,9 +64,11 @@ async function checkMailService(domain) {
     try {
         const mx = await dns.resolveMx(domain);
         ok = Array.isArray(mx) && mx.length > 0;
-    } catch {
+    } catch(e) {
+        console.log(e);
     }
     workingDomains.set(domain, ok);
+    console.log(`Domain mx ${domain} status ${ok}`);
     return ok;
 }
 
