@@ -1,0 +1,16 @@
+{
+  "name": "email-parser",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "sweet-peach",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "crawlee": "^3.13.5",
+    "playwright": "^1.52.0"
+  }
+}

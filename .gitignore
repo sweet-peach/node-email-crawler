@@ -1,0 +1,7 @@
+#IDE
+.idea
+
+node_modules
+storage
+in.csv
+out.csv
