@@ -1,7 +1,7 @@
 import {CheerioCrawler, Configuration, log, PlaywrightCrawler, RequestQueue} from 'crawlee';
 import {promises as dns} from "dns";
 import {MemoryStorage} from "@crawlee/memory-storage";
-
+import {config} from "./config.js";
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -79,7 +79,7 @@ async function checkMailService(domain) {
 export async function crawlUrl(startUrl) {
     const emailSet = new Set();
     let blockedRequests = 0;
-    const config = new Configuration({
+    const crawlerConfig = new Configuration({
         storageClient: new MemoryStorage({
             persistStorage: false
         })
@@ -110,6 +110,10 @@ export async function crawlUrl(startUrl) {
                     globs: COMMON_INCLUDE,
                     exclude: COMMON_EXCLUDE,
                 });
+
+            if(config.DEBUG_LOGS){
+                log.info(`Processed (Cheerio): ${request.url}`);
+            }
         },
         failedRequestHandler({request, error}) {
             if (error?.message?.includes('403')) {
@@ -122,7 +126,7 @@ export async function crawlUrl(startUrl) {
 
             log.warning(`${request.url} failed: ${error?.message ?? 'unknown error'}`);
         },
-    }, config);
+    }, crawlerConfig);
     const siteHost = new URL(startUrl).hostname.replace(/^www\./, '').toLowerCase();
     log.info(`Processing: ${siteHost}`);
     blockedRequests = 0;
@@ -159,6 +163,10 @@ export async function crawlUrl(startUrl) {
                         globs: COMMON_INCLUDE,
                         exclude: COMMON_EXCLUDE,
                     });
+
+                    if(config.DEBUG_LOGS){
+                        log.info(`Processed (Playwright): ${request.url}`);
+                    }
                 },
 
                 failedRequestHandler({ request, error, log }) {
