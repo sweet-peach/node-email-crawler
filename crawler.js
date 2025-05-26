@@ -1,4 +1,4 @@
-import {CheerioCrawler, log} from 'crawlee';
+import {HttpCrawler, log} from 'crawlee';
 import {promises as dns} from "dns";
 import {config} from "./config.js";
 
@@ -14,22 +14,17 @@ function extractEmails(text) {
     }
 }
 
-const crawler = new CheerioCrawler({
+const crawler = new HttpCrawler({
     maxConcurrency: config.MAX_CONCURRENCY,
+    minConcurrency: 10,
     requestHandlerTimeoutSecs: 60,
+    autoscaledPoolOptions: { autoscaleIntervalSecs: 5 },
     maxRequestsPerCrawl: 10000,
     respectRobotsTxtFile: true,
     async requestHandler({request, $, body, enqueueLinks}) {
-        log.info(`Processing: ${request.loadedUrl || request.url}`);
-
-        const text = $ ? $.text() : body;
-        extractEmails(text);
-
-        await enqueueLinks({strategy: 'same-domain'});
-    },
-
-    failedRequestHandler({request, error}) {
-        log.warning(`❌  ${request.url} failed: ${error?.message ?? 'unknown error'}`);
+        const html = body.toString();        // без DOM
+        extractEmails(html);                 // regex
+        await enqueueLinks({ html, strategy: 'same-domain' });
     },
 });
 
@@ -49,10 +44,11 @@ async function checkMailService(domain) {
 
 export async function crawlUrl(startUrl) {
     emailSet = new Set();
-
-    await crawler.run([startUrl]);
-
     const siteHost = new URL(startUrl).hostname.replace(/^www\./, '').toLowerCase();
+    log.info(`Crawling: ${siteHost}`);
+    await crawler.run([startUrl]);
+    log.info(`Done: ${siteHost}`);
+
     const hostEmails = [];
     const thirdPartyEmails = [];
 
@@ -67,6 +63,5 @@ export async function crawlUrl(startUrl) {
             thirdPartyEmails.push(email);
         }
     }
-
     return [hostEmails, thirdPartyEmails];
 }
