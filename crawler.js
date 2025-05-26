@@ -1,4 +1,4 @@
-import {CheerioCrawler, Configuration, log, RequestQueue} from 'crawlee';
+import {CheerioCrawler, Configuration, log, PlaywrightCrawler, RequestQueue} from 'crawlee';
 import {promises as dns} from "dns";
 import {MemoryStorage} from "@crawlee/memory-storage";
 
@@ -84,6 +84,7 @@ export async function crawlUrl(startUrl) {
             persistStorage: false
         })
     });
+    let isJavaScriptDependent = false;
 
     const crawler = new CheerioCrawler({
         requestHandlerTimeoutSecs: 60,
@@ -92,8 +93,14 @@ export async function crawlUrl(startUrl) {
         ignoreSslErrors: true,
         additionalMimeTypes: ['application/rss+xml'],
         async requestHandler({request, $, body, enqueueLinks}) {
-
             const text = body.toString();
+
+            isJavaScriptDependent = text.includes('You need to enable JavaScript to run this app');
+
+            if(isJavaScriptDependent){
+                return crawler.stop('Target site requires JS — switching crawler type');
+            }
+
             extractEmails(text, emailSet);
             if($) extractEmailsFromMailto($, emailSet);
 
@@ -120,6 +127,56 @@ export async function crawlUrl(startUrl) {
     log.info(`Processing: ${siteHost}`);
     blockedRequests = 0;
     await crawler.run([startUrl]);
+    if(isJavaScriptDependent){
+        const browserConfig = new Configuration({
+            storageClient: new MemoryStorage({
+                persistStorage: false
+            })
+        });
+        const browserCrawler = new PlaywrightCrawler(
+            {
+                requestHandlerTimeoutSecs: 120,
+                maxRequestsPerCrawl: 100,
+                respectRobotsTxtFile: false,
+                async requestHandler({ request, page, enqueueLinks, log }) {
+                    await page.waitForLoadState('domcontentloaded', { timeout: 15_000 })
+                        .catch(() => {});
+
+                    const html = await page.content();
+
+                    extractEmails(html.toString(), emailSet);
+
+                    const mailtoLinks = await page.$$eval('a[href^="mailto:"]',
+                        (as) => as.map(a => a.getAttribute('href') || '')
+                    );
+                    for (const link of mailtoLinks) {
+                        const email = link.replace(/^mailto:/i, '').split('?')[0];
+                        if (email) emailSet.add(email);
+                    }
+
+                    await enqueueLinks({
+                        strategy: 'same-domain',
+                        globs: COMMON_INCLUDE,
+                        exclude: COMMON_EXCLUDE,
+                    });
+                },
+
+                failedRequestHandler({ request, error, log }) {
+                    if (error?.message?.includes('403')) {
+                        blockedRequests++;
+                        if (blockedRequests >= MAX_BLOCKED) {
+                            log.error(`Too many blocked requests (${blockedRequests}). Aborting crawl for this site.`);
+                            return browserCrawler.autoscaledPool.abort();
+                        }
+                    }
+                    log.warning(`${request.url} failed in PlaywrightCrawler: ${error?.message ?? 'unknown error'}`);
+                },
+            },
+            browserConfig,
+        );
+
+        await browserCrawler.run([startUrl])
+    }
 
     const hostEmails = [];
     const thirdPartyEmails = [];
