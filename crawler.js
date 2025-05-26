@@ -36,7 +36,6 @@ const crawler = new CheerioCrawler({
     maxRequestsPerCrawl: 10000,
     respectRobotsTxtFile: true,
     async requestHandler({request, $, body, enqueueLinks}) {
-        log.info(`Processing: ${request.loadedUrl || request.url}`);
         if (request.headers['content-type']?.includes('text/html')) {
             return;
         }
@@ -53,7 +52,7 @@ const crawler = new CheerioCrawler({
             });
     },
     failedRequestHandler({request, error}) {
-        log.warning(`❌  ${request.url} failed: ${error?.message ?? 'unknown error'}`);
+        log.warning(`${request.url} failed: ${error?.message ?? 'unknown error'}`);
     },
 });
 
@@ -74,9 +73,8 @@ async function checkMailService(domain) {
 export async function crawlUrl(startUrl) {
     emailSet = new Set();
     const siteHost = new URL(startUrl).hostname.replace(/^www\./, '').toLowerCase();
-    log.info(`Crawling: ${siteHost}`);
+    log.info(`Processing: ${siteHost}`);
     await crawler.run([startUrl]);
-    log.info(`Done: ${siteHost}`);
 
     const hostEmails = [];
     const thirdPartyEmails = [];
