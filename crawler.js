@@ -1,8 +1,7 @@
-import {CheerioCrawler, log} from 'crawlee';
+import {CheerioCrawler, Configuration, log, RequestQueue} from 'crawlee';
 import {promises as dns} from "dns";
-import {config} from "./config.js";
+import {MemoryStorage} from "@crawlee/memory-storage";
 
-let emailSet = new Set();
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -35,7 +34,7 @@ const COMMON_EXCLUDE = [
     '**/*.swf', '**/*.class', '**/*.jar'
 ];
 
-function extractEmails(text ){
+function extractEmails(text, emailSet){
     const pattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 
     const matches = text
@@ -49,7 +48,7 @@ function extractEmails(text ){
     }
 }
 
-function extractEmailsFromMailto($) {
+function extractEmailsFromMailto($, emailSet) {
     $('a[href^="mailto:"]').each((_, el) => {
         const raw = $(el).attr('href');
         if (!raw) return;
@@ -58,44 +57,6 @@ function extractEmailsFromMailto($) {
         if (email) emailSet.add(email.toLowerCase());
     });
 }
-
-let blockedRequests = 0;
-
-const crawler = new CheerioCrawler({
-    maxConcurrency: config.MAX_CONCURRENCY,
-    minConcurrency: 2,
-    requestHandlerTimeoutSecs: 60,
-    autoscaledPoolOptions: {autoscaleIntervalSecs: 5},
-    maxRequestsPerCrawl: 100,
-    respectRobotsTxtFile: true,
-    ignoreSslErrors: true,
-    additionalMimeTypes: ['application/rss+xml'],
-    async requestHandler({request, $, body, enqueueLinks}) {
-
-        const text = body.toString();
-        extractEmails(text);
-        if($) extractEmailsFromMailto($);
-        // TODO Check for malitos and add them to list
-
-        await enqueueLinks(
-            {
-                strategy: 'same-domain',
-                globs: COMMON_INCLUDE,
-                exclude: COMMON_EXCLUDE,
-            });
-    },
-    failedRequestHandler({request, error}) {
-        if (error?.message?.includes('403')) {
-            blockedRequests++;
-            if (blockedRequests >= MAX_BLOCKED) {
-                log.error(`Too many blocked requests (${blockedRequests}). Aborting crawl for this site.`);
-                return crawler.autoscaledPool.abort();
-            }
-        }
-
-        log.warning(`${request.url} failed: ${error?.message ?? 'unknown error'}`);
-    },
-});
 
 const workingDomains = new Map();
 
@@ -113,8 +74,48 @@ async function checkMailService(domain) {
     return ok;
 }
 
+
+
 export async function crawlUrl(startUrl) {
-    emailSet = new Set();
+    const emailSet = new Set();
+    let blockedRequests = 0;
+    const config = new Configuration({
+        storageClient: new MemoryStorage({
+            persistStorage: false
+        })
+    });
+
+    const crawler = new CheerioCrawler({
+        requestHandlerTimeoutSecs: 60,
+        maxRequestsPerCrawl: 100,
+        respectRobotsTxtFile: false,
+        ignoreSslErrors: true,
+        additionalMimeTypes: ['application/rss+xml'],
+        async requestHandler({request, $, body, enqueueLinks}) {
+
+            const text = body.toString();
+            extractEmails(text, emailSet);
+            if($) extractEmailsFromMailto($, emailSet);
+
+            await enqueueLinks(
+                {
+                    strategy: 'same-domain',
+                    globs: COMMON_INCLUDE,
+                    exclude: COMMON_EXCLUDE,
+                });
+        },
+        failedRequestHandler({request, error}) {
+            if (error?.message?.includes('403')) {
+                blockedRequests++;
+                if (blockedRequests >= MAX_BLOCKED) {
+                    log.error(`Too many blocked requests (${blockedRequests}). Aborting crawl for this site.`);
+                    return crawler.autoscaledPool.abort();
+                }
+            }
+
+            log.warning(`${request.url} failed: ${error?.message ?? 'unknown error'}`);
+        },
+    }, config);
     const siteHost = new URL(startUrl).hostname.replace(/^www\./, '').toLowerCase();
     log.info(`Processing: ${siteHost}`);
     blockedRequests = 0;

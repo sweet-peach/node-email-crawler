@@ -1,3 +1,4 @@
 export const config = {
-    MAX_CONCURRENCY: 5
+    MAX_CRAWLER_CONCURRENCY: 10,
+    MAX_ACTIVE_CRAWLERS: 15,
 }

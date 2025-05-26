@@ -10,7 +10,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@crawlee/memory-storage": "^3.13.5",
     "crawlee": "^3.13.5",
-    "playwright": "^1.52.0"
+    "playwright": "^1.52.0",
+    "uuid": "^11.1.0"
   }
 }

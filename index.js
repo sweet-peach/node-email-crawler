@@ -1,14 +1,14 @@
 import fs from 'fs';
 import {promises as dns} from 'dns';
 import net from 'net';
-import {URL} from 'url';
 import {crawlUrl} from "./crawler.js";
+import {config} from "./config.js";
+import {getUniqueLines} from "./cleaner.js";
 
 const inputFile = './in.csv';
 const outputFile = './out.csv'
 
 const HTTPS_PORT = 443;
-
 const CONNECTION_TIMEOUT = 5000;
 
 function checkPort(host, port, timeout = CONNECTION_TIMEOUT) {
@@ -39,57 +39,38 @@ async function checkDomain(domain) {
     return result;
 }
 
-const checkedDomains = new Set();
+async function runTask(name, domain) {
+    let httpsStatus = false;
+    if (domain) {
+        const domRes = await checkDomain(domain);
+        httpsStatus = domRes.https;
+    }
+    let hostEmails = [];
+    let thirdPartyEmails = [];
 
-async function processFile() {
+    if (httpsStatus) {
+        [hostEmails, thirdPartyEmails] = await crawlUrl(`https://${domain}`);
+    }
+    return [name, domain, httpsStatus, hostEmails, thirdPartyEmails].join(';');
+}
+
+async function main(){
     const data = fs.readFileSync(inputFile, 'utf8');
     const lines = data.split(/\r?\n/).filter(Boolean);
 
-    const writeStream = fs.createWriteStream(outputFile, {encoding: 'utf8'});
-    writeStream.write('\uFEFF');
-    writeStream.write('Nombre de la empresa;URL de la web;Accesible;Emails de contacto;Emails de terceros\n');
+    const uniqueLines = getUniqueLines(lines);
+    const out = fs.createWriteStream(outputFile, {encoding: 'utf8'});
+    out.write('\uFEFF');
+    out.write('Nombre de la empresa;URL de la web;Accesible;Emails de contacto;Emails de terceros\n');
+    for (let i = 0; i < uniqueLines.length; i += config.MAX_ACTIVE_CRAWLERS) {
+        const batch = uniqueLines.slice(i, i + config.MAX_ACTIVE_CRAWLERS);
 
-    let index = 0;
+        const results = await Promise.all(batch.map(([name, domain]) => runTask(name, domain)));
 
-    async function runTask(idx) {
-        const cols = lines[idx].split(';');
-        const name = cols[0];
-        const url = cols[1] || '';
-        let domain = '';
-        try {
-            domain = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
-        } catch {}
-
-        if (checkedDomains.has(domain)) return;
-
-        let httpsStatus = false;
-        if (domain) {
-            const domRes = await checkDomain(domain);
-            httpsStatus = domRes.https;
-        }
-        let hostEmails = [];
-        let thirdPartyEmails = [];
-
-        if (httpsStatus) {
-            [hostEmails, thirdPartyEmails] = await crawlUrl(`https://${domain}`);
-        }
-        checkedDomains.add(domain);
-        return [name, domain, httpsStatus, hostEmails, thirdPartyEmails].join(';');
+        for (const res of results) if (res) out.write(res + '\n');
     }
 
-    for (let i = 0; lines.length > index++; i++) {
-        try {
-            const result = await runTask(i);
-            if(result){
-                writeStream.write(result + '\n');
-            }
-        } catch (error) {
-            console.error('Error on task:', error)
-        }
-    }
-    writeStream.on('finish', () => console.log('Done'));
-
-    writeStream.end();
+    out.end(() => console.log('Done'));
 }
 
-processFile().catch(err => console.error('Error:', err));
+main();
