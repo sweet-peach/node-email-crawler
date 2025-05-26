@@ -14,15 +14,34 @@ const COMMON_INCLUDE = [
     '**/blog/**', '**/news/**'
 ];
 
+const MAX_BLOCKED = 10;
+
 const COMMON_EXCLUDE = [
-    '**/*.jpg', '**/*.jpeg', '**/*.png', '**/*.gif', '**/*.svg', '**/*.webp', '**/*.ico',
-    '**/*.css', '**/*.js', '**/*.woff*', '**/*.ttf', '**/*.eot',
-    '**/*.mp4', '**/*.mp3', '**/*.avi', '**/*.zip', '**/*.rar', '**/*.7z', '**/*.tar', '**/*.gz'
+    '**/*.jpg', '**/*.jpeg', '**/*.png', '**/*.gif', '**/*.svg', '**/*.webp',
+    '**/*.ico', '**/*.bmp', '**/*.tif', '**/*.tiff', '**/*.psd', '**/*.ai',
+    '**/*.eps', '**/*.heic', '**/*.heif',
+    '**/*.css', '**/*.scss', '**/*.less',
+    '**/*.woff', '**/*.woff2', '**/*.ttf', '**/*.otf', '**/*.eot',
+    '**/*.js', '**/*.mjs', '**/*.ts',
+    '**/*.json', '**/*.geojson', '**/*.wasm',
+    '**/*.mp4', '**/*.m4v', '**/*.mov', '**/*.avi', '**/*.wmv',
+    '**/*.flv', '**/*.mkv', '**/*.webm', '**/*.mpeg', '**/*.mpg',
+    '**/*.mp3', '**/*.m4a', '**/*.wav', '**/*.flac', '**/*.ogg', '**/*.oga',
+    '**/*.pdf', '**/*.doc', '**/*.docx', '**/*.xls', '**/*.xlsx',
+    '**/*.ppt', '**/*.pptx', '**/*.odt', '**/*.ods', '**/*.odp', '**/*.rtf',
+    '**/*.zip', '**/*.rar', '**/*.7z', '**/*.tar', '**/*.tgz',
+    '**/*.tar.gz', '**/*.bz2', '**/*.gz', '**/*.xz',
+    '**/*.dmg', '**/*.iso', '**/*.exe', '**/*.msi', '**/*.bin',
+    '**/*.swf', '**/*.class', '**/*.jar'
 ];
 
-function extractEmails(text) {
+function extractEmails(text ){
     const pattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-    const matches = text.match(pattern);
+
+    const matches = text
+        .replace(/\\[rn]/g, ' ')
+        .match(pattern);
+
     if (matches) {
         for (const email of matches) {
             emailSet.add(email.toLowerCase());
@@ -30,12 +49,24 @@ function extractEmails(text) {
     }
 }
 
+function extractEmailsFromMailto($) {
+    $('a[href^="mailto:"]').each((_, el) => {
+        const raw = $(el).attr('href');
+        if (!raw) return;
+
+        const email = raw.replace(/^mailto:/i, '').split('?')[0];
+        if (email) emailSet.add(email.toLowerCase());
+    });
+}
+
+let blockedRequests = 0;
+
 const crawler = new CheerioCrawler({
     maxConcurrency: config.MAX_CONCURRENCY,
-    minConcurrency: 5,
+    minConcurrency: 2,
     requestHandlerTimeoutSecs: 60,
     autoscaledPoolOptions: {autoscaleIntervalSecs: 5},
-    maxRequestsPerCrawl: 10000,
+    maxRequestsPerCrawl: 100,
     respectRobotsTxtFile: true,
     ignoreSslErrors: true,
     additionalMimeTypes: ['application/rss+xml'],
@@ -43,6 +74,8 @@ const crawler = new CheerioCrawler({
 
         const text = body.toString();
         extractEmails(text);
+        if($) extractEmailsFromMailto($);
+        // TODO Check for malitos and add them to list
 
         await enqueueLinks(
             {
@@ -52,6 +85,14 @@ const crawler = new CheerioCrawler({
             });
     },
     failedRequestHandler({request, error}) {
+        if (error?.message?.includes('403')) {
+            blockedRequests++;
+            if (blockedRequests >= MAX_BLOCKED) {
+                log.error(`Too many blocked requests (${blockedRequests}). Aborting crawl for this site.`);
+                return crawler.autoscaledPool.abort();
+            }
+        }
+
         log.warning(`${request.url} failed: ${error?.message ?? 'unknown error'}`);
     },
 });
@@ -76,6 +117,7 @@ export async function crawlUrl(startUrl) {
     emailSet = new Set();
     const siteHost = new URL(startUrl).hostname.replace(/^www\./, '').toLowerCase();
     log.info(`Processing: ${siteHost}`);
+    blockedRequests = 0;
     await crawler.run([startUrl]);
 
     const hostEmails = [];
