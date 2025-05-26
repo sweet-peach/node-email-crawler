@@ -22,7 +22,7 @@ npm install
 Single‑line entries separated by a semicolon**`;`**:
 
 ```csv
-"Name of company websitre";https://www.example.com/
+"Name of company website";https://www.example.com/
 ```
 
 Duplicate lines are allowed; `index.js` de‑duplicates domains internally so each site is crawled once.
