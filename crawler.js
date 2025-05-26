@@ -22,8 +22,9 @@ const crawler = new HttpCrawler({
     maxRequestsPerCrawl: 10000,
     respectRobotsTxtFile: true,
     async requestHandler({request, $, body, enqueueLinks}) {
-        const html = body.toString();        // без DOM
-        extractEmails(html);                 // regex
+        const html = body.toString();
+        extractEmails(html);
+        if(!html) return;
         await enqueueLinks({ html, strategy: 'same-domain' });
     },
 });
@@ -54,7 +55,7 @@ export async function crawlUrl(startUrl) {
 
     for (const email of emailSet) {
         const domain = email.split('@')[1];
-        if (!(await checkMailService(domain))) continue;          // skip dead domains
+        if (!(await checkMailService(domain))) continue;
 
         const root = domain.replace(/^www\./, '').toLowerCase();
         if (root === siteHost || root.endsWith('.' + siteHost)) {

@@ -9,7 +9,7 @@ const outputFile = './out.csv'
 
 const HTTPS_PORT = 443;
 
-const CONNECTION_TIMEOUT = 5000; // мс
+const CONNECTION_TIMEOUT = 5000;
 
 function checkPort(host, port, timeout = CONNECTION_TIMEOUT) {
     return new Promise(resolve => {
